@@ -1,0 +1,511 @@
+{
+  "name": "WF5 — Génération Mensuelle Abonnés Livre&Vous",
+  "nodes": [
+    {
+      "id": "wf5-schedule",
+      "name": "Déclencheur Mensuel",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 1 * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wf5-read-theme",
+      "name": "Lire Thème du Mois",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [440, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://n8n.srv1591454.hstgr.cloud/webhook/get-monthly-theme",
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-get-subs",
+      "name": "Charger Abonnés",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [680, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://n8n.srv1591454.hstgr.cloud/webhook/get-subscribers",
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-parse-subs",
+      "name": "Parser Abonnés",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst subscribers = response.subscribers || [];\n\nconst themeData = $('Lire Thème du Mois').first().json;\nconst theme = themeData.theme || 'Aventure du mois';\nconst monthLabel = themeData.monthLabel || new Date().toLocaleDateString('fr-FR', {month:'long', year:'numeric'});\n\nif (subscribers.length === 0) {\n  throw new Error('Aucun abonné actif trouvé. Ajoutez des abonnés via WF4.');\n}\n\nreturn subscribers.map(sub => ({\n  json: { ...sub, theme, monthLabel }\n}));"
+      }
+    },
+    {
+      "id": "wf5-split",
+      "name": "Split Abonnés",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1160, 300],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-fetch-history",
+      "name": "Lire Historique Abonné",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1400, 120],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://n8n.srv1591454.hstgr.cloud/webhook/get-story-history?email={{ encodeURIComponent($json.email) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-merge-history",
+      "name": "Fusionner Sub+Historique",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1640, 120],
+      "parameters": {
+        "jsCode": "const sub = $('Split Abonnés').item.json;\nconst histResp = $input.first().json;\nconst history = histResp.history || [];\n\nconst historyText = history.length === 0\n  ? 'Aucune histoire précédente pour cet abonné.'\n  : history.map((h, i) => `${i + 1}. \"${h.titre}\" — Thème : ${h.theme} (${h.monthLabel}) — ${h.resume}`).join('\\n');\n\nreturn [{ json: { ...sub, storyHistory: history, storyHistoryText: historyText } }];"
+      }
+    },
+    {
+      "id": "wf5-ai-agent",
+      "name": "AI Agent Mensuel",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [1880, 120],
+      "parameters": {
+        "promptType": "define",
+        "text": "=Voici une commande abonnement mensuel Livre&Vous :\n\n--- THÈME DU MOIS ---\nThème : {{ $json.theme }}\nMois : {{ $json.monthLabel }}\n\n--- HISTOIRES PRÉCÉDENTES DE CET ABONNÉ (À NE PAS RÉPÉTER) ---\n{{ $json.storyHistoryText }}\n\n⚠️ La nouvelle histoire doit avoir une trame, des décors et une aventure ENTIÈREMENT DIFFÉRENTS de ceux listés ci-dessus.\n\n--- PERSONNAGE PRINCIPAL ---\nPrénom : {{ $json.prenom }}\nÂge : {{ $json.age }}\nGenre : {{ $json.genre }}\nCoupe : {{ $json.coupe }}\nCouleur cheveux : {{ $json.couleur }}\nCouleur yeux : {{ $json.yeux }}\n\n--- PERSONNAGE SECONDAIRE ---\nPrésent : {{ $json.hasSecondChar ? 'Oui' : 'Non' }}\nPrénom : {{ $json.prenom2 || '' }}\nÂge : {{ $json.age2 || '' }}\nGenre : {{ $json.genre2 || '' }}\nLien : {{ $json.lien2 || '' }}\nCoupe : {{ $json.coupe2 || '' }}\nCouleur cheveux : {{ $json.couleur2 || '' }}\nCouleur yeux : {{ $json.yeux2 || '' }}\n\nL'histoire DOIT être entièrement basée sur le thème du mois et adaptée à l'âge de l'enfant. Génère exactement 15 pages.",
+        "options": {
+          "systemMessage": "Tu es un agent créatif spécialisé dans la création de livres personnalisés pour enfants chez Livre&Vous.\nRÈGLE ABSOLUE : Respecte EXACTEMENT toutes les informations du client sans les modifier ni les adoucir.\n\nTEXTE DES PAGES :\n- Adapte le nombre de phrases selon l'âge : 1-2 phrases pour moins de 5 ans, 2-3 phrases pour 5-8 ans, 3-4 phrases pour 8-12 ans\n- Base l'histoire à 100% sur le THÈME DU MOIS fourni\n- Histoire fun et aventureuse, sans morale forcée\n- Intègre naturellement le prénom dans le texte\n- Ne mentionne JAMAIS la description physique dans le texte\n- ANCRAGE DANS LA RÉALITÉ : L'histoire doit rester proche du monde réel de l'enfant — une petite touche de fantaisie est autorisée (objet magique, découverte inattendue) mais jamais de délire total. L'aventure doit rester crédible et reconnaissable pour un enfant.\n- Les décors doivent être inspirés de lieux réels et accessibles (parc, rue, forêt, plage, gymnase...) — pas de mondes inventés de toutes pièces\n- CONTENU ADAPTÉ : L'histoire doit être adaptée aux enfants. Les incidents du quotidien PEUVENT apparaître naturellement. Dans les PROMPTS D'ILLUSTRATION, ces scènes doivent être reformulées positivement — jamais de chute visible, jamais de sang, jamais de blessure apparente.\n- UNICITÉ ABSOLUE : Chaque histoire doit être entièrement originale par rapport aux précédentes. Trame, décors, type d'aventure et péripéties doivent être nouveaux à chaque fois. Ne jamais réutiliser une situation, un décor ou une aventure déjà exploré.\n\nPROMPTS D'ILLUSTRATION :\n- Chaque prompt doit OBLIGATOIREMENT commencer par \"3D Pixar CGI animation style, Disney-Pixar quality render,\"\n- PERSONNAGE PRINCIPAL : toujours décrit en premier avec ses caractéristiques physiques exactes\n- PERSONNAGE SECONDAIRE (si présent) : toujours décrit en second avec ses caractéristiques physiques exactes\n- Chaque prompt précise clairement qui fait quoi dans la scène\n- Le personnage principal est toujours au centre de l'action\n- Ne jamais utiliser de termes photoréalistes\n- Large arrière-plan visible avec décor immersif\n- TAILLE ET PLACEMENT : Le personnage doit être grand et bien visible dans la scène. La tête du personnage ne doit jamais dépasser les 70% du haut de l'image.\n- PLACEMENT ALTERNÉ : Pour les pages PAIRES (2,4,6,8,10,12,14), positionne le personnage dans le tiers DROIT. Pour les pages IMPAIRES (3,5,7,9,11,13,15), positionne le personnage dans le tiers GAUCHE.\n- AUCUN texte, lettre, mot ou caractère ne doit apparaître dans l'illustration\n- PAGE 1 SPÉCIALE (couverture) : personnages dans le tiers DROIT. La scène doit être LUMINEUSE ET COLORÉE.\n- PERSONNAGES STRICTS : Ne générer QUE les personnages définis. Ne jamais ajouter de personnages supplémentaires.\n- ÉCLAIRAGE ÉQUILIBRÉ : lumière naturelle et équilibrée — privilégier une lumière dorée chaleureuse.\n- CONTENU SAFE : Les prompts doivent être 100% safe — pas de violence, pas de sang, pas de chutes visibles.\n\nFORMAT JSON STRICT (sans markdown, sans backticks) :\n{\n  \"prenom\": \"...\",\n  \"titre\": \"...\",\n  \"resume\": \"Un résumé court et accrocheur de l'histoire en 2-3 phrases maximum, écrit à la troisième personne.\",\n  \"pages\": [\n    {\n      \"numero\": 1,\n      \"texte_page\": \"\",\n      \"prompt_illustration\": \"3D Pixar CGI animation style, Disney-Pixar quality render, ...\"\n    }\n  ]\n}\n\nGénère exactement 15 pages : page 1 sans texte (couverture — personnages à droite, scène lumineuse), pages 2 à 15 avec texte et illustration."
+        }
+      }
+    },
+    {
+      "id": "wf5-anthropic",
+      "name": "Anthropic Model Mensuel",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [1820, 340],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-6",
+          "cachedResultName": "claude-sonnet-4-6"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "anthropicApi": {
+          "id": "qhJKmaQ6ULuAUtdV",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "id": "wf5-parse-story",
+      "name": "Parser Histoire",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2120, 120],
+      "parameters": {
+        "jsCode": "let output = $input.item.json.output;\noutput = output.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(output);\n} catch(e) {\n  try {\n    output = output.replace(/:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/gs, (match, p1) => {\n      const cleaned = p1.replace(/(?<!\\\\)\"/g, '\\\\\"');\n      return `: \"${cleaned}\"`;\n    });\n    parsed = JSON.parse(output);\n  } catch(e2) {\n    const titreMatch = output.match(/\"titre\":\\s*\"([^\"]+)\"/);\n    const prenomMatch = output.match(/\"prenom\":\\s*\"([^\"]+)\"/);\n    const resumeMatch = output.match(/\"resume\":\\s*\"([^\"]+)\"/);\n    parsed = {\n      titre: titreMatch?.[1] || 'Mon aventure',\n      prenom: prenomMatch?.[1] || '',\n      resume: resumeMatch?.[1] || '',\n      pages: []\n    };\n  }\n}\n\nconst sub = $('Split Abonnés').item.json;\n\nconst prenom = sub.prenom || '';\nconst imageRef = sub.imageRef || '';\nconst imageRef2 = sub.imageRef2 || '';\nconst hasSecondChar = sub.hasSecondChar || false;\n\nconst coverNote = 'IMPORTANT: characters must be in the BOTTOM RIGHT area of the image, larger than usual — filling about 40% of the image height. The TOP 20% of the right side is reserved for logo overlay — keep it completely clear of any characters or important elements. Characters must be fully visible but their head must not exceed 80% from the top of the image. Left half and center must show background and decor only. Bright colorful scene, blue or golden sky, vivid cheerful colors, warm sunlight. ';\n\nreturn parsed.pages.slice(0, 15).map(page => {\n  const isPage1 = (page.numero || page.page) === 1;\n  return {\n    json: {\n      page: page.numero || page.page,\n      texte: page.texte_page || page.texte || '',\n      imageRef,\n      imageRef2,\n      hasSecondChar,\n      prompt: `3D Pixar CGI animation style, Disney-Pixar quality render, children book illustration, wide scene. ${isPage1 ? coverNote : ''}${page.prompt_illustration || page.prompt || ''}. REFERENCE IMAGE IS THE ONLY SOURCE FOR CHARACTER APPEARANCE: replicate exactly the character's face, hair color and style, skin tone, clothing, shoes and accessories from the reference image — do not invent or modify any physical feature or clothing item. Full image filled with rich immersive background and environment from top to bottom — no empty zones, no blank areas. Character stands naturally in the lower portion of the scene, large and prominent. Character's head stays below the upper 30% of the image. Character positioned in left or right third, never centered. Natural warm lighting, balanced exposure, sunny or softly cloudy. No additional people in the scene. No text, signs or letters anywhere. Safe and joyful content for children. Smooth 3D textures, wide angle view, no photorealism.`,\n      prenom,\n      titre: parsed.titre,\n      resume: parsed.resume,\n      dedicace: sub.theme || '',\n      email: sub.email || '',\n      firstName: sub.firstName || '',\n      lastName: sub.lastName || '',\n      address1: sub.address1 || '',\n      address2: sub.address2 || '',\n      city: sub.city || '',\n      postcode: sub.postcode || '',\n      country: sub.country || 'FR',\n      phone: sub.phone || '',\n      customerId: sub.customerId || '',\n      orderId: sub.orderId || sub.email || '',\n      genre: sub.genre || '',\n      couverture: sub.couverture || 'Rigide - 20x20 cm',\n      theme: sub.theme || '',\n      monthLabel: sub.monthLabel || ''\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "wf5-prep-imgs",
+      "name": "Préparer Images Ref",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2360, 120],
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst uploads = [{\n  json: {\n    fileUrl: item.imageRef,\n    uploadPath: 'images',\n    fileName: `ref1_${Date.now()}.png`,\n    isMain: true,\n    originalData: item\n  }\n}];\n\nif (item.hasSecondChar && item.imageRef2) {\n  uploads.push({\n    json: {\n      fileUrl: item.imageRef2,\n      uploadPath: 'images',\n      fileName: `ref2_${Date.now()}.png`,\n      isMain: false,\n      originalData: item\n    }\n  });\n}\n\nreturn uploads;"
+      }
+    },
+    {
+      "id": "wf5-upload-img",
+      "name": "Upload Image KIE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [2600, 120],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kieai.redpandaai.co/api/file-url-upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "Authorization", "value": "Bearer 778cbd7dffd013e1c63321b2a00cceb5"}]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"fileUrl\": \"{{ $json.fileUrl }}\",\n  \"uploadPath\": \"images\",\n  \"fileName\": \"{{ $json.fileName }}\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-build-kie",
+      "name": "Construire Body KIE",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2840, 120],
+      "parameters": {
+        "jsCode": "const uploads = $input.all();\nconst pages = $('Parser Histoire').all();\n\nconst kieRef1 = uploads[0]?.json?.data?.downloadUrl || '';\nconst kieRef2 = uploads[1]?.json?.data?.downloadUrl || '';\n\nreturn pages.map(page => {\n  const imageInput = [kieRef1];\n  if (kieRef2) imageInput.push(kieRef2);\n\n  return {\n    json: {\n      ...page.json,\n      kieBody: JSON.stringify({\n        model: 'nano-banana-2',\n        input: {\n          prompt: page.json.prompt,\n          image_input: imageInput,\n          aspect_ratio: '16:9',\n          resolution: '1K',\n          output_format: 'png'\n        }\n      })\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "wf5-submit-kie",
+      "name": "Soumettre Tâches KIE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [3080, 120],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/jobs/createTask",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer 778cbd7dffd013e1c63321b2a00cceb5"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.kieBody }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-store-ids",
+      "name": "Stocker Task IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3320, 120],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst pagesData = $('Construire Body KIE').all();\n\nreturn items.map((item, index) => ({\n  json: {\n    taskId: item.json.data?.taskId,\n    page: pagesData[index]?.json?.page || index + 1,\n    texte: pagesData[index]?.json?.texte || '',\n    prompt: pagesData[index]?.json?.prompt || '',\n    kieBody: pagesData[index]?.json?.kieBody || '',\n    prenom: pagesData[index]?.json?.prenom || '',\n    titre: pagesData[index]?.json?.titre || '',\n    resume: pagesData[index]?.json?.resume || '',\n    imageRef: pagesData[index]?.json?.imageRef || '',\n    imageRef2: pagesData[index]?.json?.imageRef2 || '',\n    email: pagesData[index]?.json?.email || '',\n    firstName: pagesData[index]?.json?.firstName || '',\n    lastName: pagesData[index]?.json?.lastName || '',\n    address1: pagesData[index]?.json?.address1 || '',\n    address2: pagesData[index]?.json?.address2 || '',\n    city: pagesData[index]?.json?.city || '',\n    postcode: pagesData[index]?.json?.postcode || '',\n    country: pagesData[index]?.json?.country || 'FR',\n    phone: pagesData[index]?.json?.phone || '',\n    customerId: pagesData[index]?.json?.customerId || '',\n    orderId: pagesData[index]?.json?.orderId || '',\n    genre: pagesData[index]?.json?.genre || '',\n    couverture: pagesData[index]?.json?.couverture || 'Rigide - 20x20 cm',\n    dedicace: pagesData[index]?.json?.dedicace || '',\n    theme: pagesData[index]?.json?.theme || '',\n    monthLabel: pagesData[index]?.json?.monthLabel || ''\n  }\n}));"
+      }
+    },
+    {
+      "id": "wf5-wait1",
+      "name": "Attente KIE",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3560, 120],
+      "parameters": {"amount": 400},
+      "webhookId": "wf5-wait1-wh"
+    },
+    {
+      "id": "wf5-poll1",
+      "name": "Vérifier Résultats KIE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [3800, 120],
+      "parameters": {
+        "url": "=https://api.kie.ai/api/v1/jobs/recordInfo?taskId={{ $json.taskId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "Authorization", "value": "Bearer 778cbd7dffd013e1c63321b2a00cceb5"}]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-check-results",
+      "name": "Analyser Résultats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4040, 120],
+      "parameters": {
+        "jsCode": "const results = $input.all();\nconst taskData = $('Stocker Task IDs').all();\n\nconst taskMap = {};\ntaskData.forEach(item => { taskMap[item.json.taskId] = item.json; });\n\nreturn results.map((item, index) => {\n  const data = item.json.data;\n  const success = data?.state === 'success' && data?.resultJson && data?.resultJson !== '';\n  const imageUrl = success ? JSON.parse(data.resultJson).resultUrls?.[0] || '' : '';\n  const pageData = taskMap[data?.taskId] || taskData[index]?.json || {};\n\n  return {\n    json: {\n      page: pageData.page || index + 1,\n      texte: pageData.texte || '',\n      prompt: pageData.prompt || '',\n      kieBody: pageData.kieBody || '',\n      prenom: pageData.prenom || '',\n      titre: pageData.titre || '',\n      resume: pageData.resume || '',\n      imageRef: pageData.imageRef || '',\n      imageRef2: pageData.imageRef2 || '',\n      email: pageData.email || '',\n      firstName: pageData.firstName || '',\n      lastName: pageData.lastName || '',\n      address1: pageData.address1 || '',\n      address2: pageData.address2 || '',\n      city: pageData.city || '',\n      postcode: pageData.postcode || '',\n      country: pageData.country || 'FR',\n      phone: pageData.phone || '',\n      customerId: pageData.customerId || '',\n      orderId: pageData.orderId || '',\n      genre: pageData.genre || '',\n      couverture: pageData.couverture || 'Rigide - 20x20 cm',\n      dedicace: pageData.dedicace || '',\n      theme: pageData.theme || '',\n      monthLabel: pageData.monthLabel || '',\n      taskId: data?.taskId,\n      imageUrl,\n      failed: !success\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "wf5-if-failed",
+      "name": "IF Échec",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [4280, 120],
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3},
+          "conditions": [
+            {
+              "id": "cond-fail",
+              "leftValue": "={{ $json.failed }}",
+              "rightValue": "",
+              "operator": {"type": "boolean", "operation": "true", "singleValue": true}
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-filter-failed",
+      "name": "Pages Échouées",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4520, -60],
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\nreturn allItems.filter(item => item.json.failed === true);"
+      }
+    },
+    {
+      "id": "wf5-retry-kie",
+      "name": "Resoumettre KIE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [4760, -60],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/jobs/createTask",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer 778cbd7dffd013e1c63321b2a00cceb5"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.kieBody }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-store-retry",
+      "name": "Stocker Retry IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5000, -60],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst pagesData = $('Pages Échouées').all();\n\nreturn items.map((item, index) => ({\n  json: {\n    taskId: item.json.data?.taskId,\n    page: pagesData[index]?.json?.page || index + 1,\n    texte: pagesData[index]?.json?.texte || '',\n    prompt: pagesData[index]?.json?.prompt || '',\n    kieBody: pagesData[index]?.json?.kieBody || '',\n    prenom: pagesData[index]?.json?.prenom || '',\n    titre: pagesData[index]?.json?.titre || '',\n    resume: pagesData[index]?.json?.resume || '',\n    imageRef: pagesData[index]?.json?.imageRef || '',\n    imageRef2: pagesData[index]?.json?.imageRef2 || '',\n    email: pagesData[index]?.json?.email || '',\n    firstName: pagesData[index]?.json?.firstName || '',\n    lastName: pagesData[index]?.json?.lastName || '',\n    address1: pagesData[index]?.json?.address1 || '',\n    city: pagesData[index]?.json?.city || '',\n    postcode: pagesData[index]?.json?.postcode || '',\n    country: pagesData[index]?.json?.country || 'FR',\n    phone: pagesData[index]?.json?.phone || '',\n    orderId: pagesData[index]?.json?.orderId || '',\n    genre: pagesData[index]?.json?.genre || '',\n    couverture: pagesData[index]?.json?.couverture || 'Rigide - 20x20 cm',\n    dedicace: pagesData[index]?.json?.dedicace || '',\n    theme: pagesData[index]?.json?.theme || '',\n    monthLabel: pagesData[index]?.json?.monthLabel || ''\n  }\n}));"
+      }
+    },
+    {
+      "id": "wf5-wait2",
+      "name": "Attente Retry",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [5240, -60],
+      "parameters": {"amount": 360},
+      "webhookId": "wf5-wait2-wh"
+    },
+    {
+      "id": "wf5-poll2",
+      "name": "Vérifier Retry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [5480, -60],
+      "parameters": {
+        "url": "=https://api.kie.ai/api/v1/jobs/recordInfo?taskId={{ $json.taskId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "Authorization", "value": "Bearer 778cbd7dffd013e1c63321b2a00cceb5"}]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-merge-results",
+      "name": "Fusionner Résultats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5480, 120],
+      "parameters": {
+        "jsCode": "const newResults = $input.all();\nconst oldResults = $('Analyser Résultats').all();\nconst taskData = $('Stocker Retry IDs').all();\n\nconst taskMap = {};\ntaskData.forEach(item => { taskMap[item.json.taskId] = item.json; });\n\nconst retriedMap = {};\nnewResults.forEach(item => {\n  const data = item.json.data;\n  const success = data?.state === 'success' && data?.resultJson && data?.resultJson !== '';\n  const imageUrl = success ? JSON.parse(data.resultJson).resultUrls?.[0] || '' : '';\n  const pageData = taskMap[data?.taskId];\n  if (pageData) {\n    retriedMap[pageData.page] = {\n      json: { ...pageData, taskId: data?.taskId, imageUrl, failed: !success }\n    };\n  }\n});\n\nreturn oldResults.map(item => {\n  const retried = retriedMap[item.json.page];\n  if (retried) return retried;\n  return item;\n});"
+      }
+    },
+    {
+      "id": "wf5-assemble",
+      "name": "Assembler Pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5720, 120],
+      "parameters": {
+        "jsCode": "const pollingResults = $input.all();\nconst allCheckResults = $('Analyser Résultats').all();\n\nconst hasFailed = allCheckResults.some(i => i.json.failed);\nif (hasFailed && pollingResults.length < allCheckResults.length) {\n  return [];\n}\n\nreturn pollingResults.map(item => ({\n  json: {\n    page: item.json.page,\n    texte: item.json.texte,\n    imageUrl: item.json.imageUrl,\n    kieBody: item.json.kieBody || '',\n    imageRef: item.json.imageRef || '',\n    imageRef2: item.json.imageRef2 || '',\n    prenom: item.json.prenom,\n    titre: item.json.titre,\n    resume: item.json.resume,\n    email: item.json.email || '',\n    firstName: item.json.firstName || '',\n    lastName: item.json.lastName || '',\n    address1: item.json.address1 || '',\n    address2: item.json.address2 || '',\n    city: item.json.city || '',\n    postcode: item.json.postcode || '',\n    country: item.json.country || 'FR',\n    phone: item.json.phone || '',\n    customerId: item.json.customerId || '',\n    orderId: item.json.orderId || '',\n    genre: item.json.genre || '',\n    couverture: item.json.couverture || 'Rigide - 20x20 cm',\n    dedicace: item.json.dedicace || '',\n    theme: item.json.theme || '',\n    monthLabel: item.json.monthLabel || ''\n  }\n}));"
+      }
+    },
+    {
+      "id": "wf5-build-book",
+      "name": "Construire Livre Abonné",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5960, 120],
+      "parameters": {
+        "jsCode": "const pages = $input.all();\nconst pagesJson = pages.map(p => ({\n  page: p.json.page,\n  texte: p.json.texte,\n  imageUrl: p.json.imageUrl,\n  kieBody: p.json.kieBody || '',\n  imageRef: p.json.imageRef || '',\n  imageRef2: p.json.imageRef2 || ''\n}));\n\nconst first = pages[0].json;\n\nconst genre = (first.genre || '').toLowerCase();\nconst remerciementUrl = (genre === 'fille' || genre === 'girl' || genre === 'f')\n  ? 'https://res.cloudinary.com/daevhiitx/image/upload/v1777104214/2_ewr756.png'\n  : 'https://res.cloudinary.com/daevhiitx/image/upload/v1777104214/1_ov5ysc.png';\n\nlet productUid = '';\nconst couverture = first.couverture || 'Rigide - 20x20 cm';\nif (couverture === 'Rigide - 20x20 cm') {\n  productUid = 'photobooks-hardcover_pf_200x200-mm-8x8-inch_pt_170-gsm-65lb-coated-silk_cl_4-4_ccl_4-4_bt_glued-left_ct_matt-lamination_prt_1-0_cpt_130-gsm-65-lb-cover-coated-silk_ver';\n} else if (couverture === 'Souple - 20x20 cm') {\n  productUid = 'photobooks-softcover_pf_200x200-mm-8x8-inch_pt_170-gsm-65lb-coated-silk_cl_4-4_ccl_4-4_bt_glued-left_ct_matt-lamination_prt_1-0_cpt_250-gsm-100-lb-cover-coated-silk_ver';\n} else if (couverture === 'Souple - 14x14 cm') {\n  productUid = 'photobooks-softcover_pf_140x140-mm-5_5x5_5-inch_pt_170-gsm-65lb-coated-silk_cl_4-4_ccl_4-4_bt_glued-left_ct_matt-lamination_prt_1-0_cpt_250-gsm-100-lb-cover-coated-silk_ver';\n}\n\nconst orderRef = `ABO-${first.orderId || first.email}-${Date.now()}`;\nconst coverImageUrl = pagesJson.length > 0 ? pagesJson[0].imageUrl || '' : '';\n\nconst bookData = {\n  orderRef,\n  prenom: first.prenom || '',\n  titre: first.titre || '',\n  resume: first.resume || '',\n  dedicace: first.dedicace || '',\n  theme: first.theme || '',\n  monthLabel: first.monthLabel || '',\n  couverture,\n  productUid,\n  remerciementUrl,\n  firstName: first.firstName || '',\n  lastName: first.lastName || '',\n  email: first.email || '',\n  address1: first.address1 || '',\n  address2: first.address2 || '',\n  city: first.city || '',\n  postcode: first.postcode || '',\n  country: first.country || 'FR',\n  phone: first.phone || '',\n  customerId: first.customerId || '',\n  originalImageUrls: pagesJson.map(p => p.imageUrl),\n  pages: pagesJson\n};\n\nconst dataB64 = Buffer.from(JSON.stringify(bookData)).toString('base64');\n\nreturn [{\n  json: {\n    dataB64,\n    orderRef,\n    prenom: bookData.prenom,\n    titre: bookData.titre,\n    resume: bookData.resume,\n    couverture,\n    coverImageUrl,\n    totalPages: pagesJson.length,\n    email: bookData.email,\n    firstName: bookData.firstName,\n    theme: bookData.theme,\n    monthLabel: bookData.monthLabel\n  }\n}];"
+      }
+    },
+    {
+      "id": "wf5-add-queue",
+      "name": "Ajouter à la File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [6200, 120],
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.srv1591454.hstgr.cloud/webhook/add-to-queue",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"dataB64\":       \"{{ $json.dataB64 }}\",\n  \"orderRef\":      \"{{ $json.orderRef }}\",\n  \"prenom\":        \"{{ $json.prenom }}\",\n  \"titre\":         \"{{ $json.titre }}\",\n  \"couverture\":    \"{{ $json.couverture }}\",\n  \"coverImageUrl\": \"{{ $json.coverImageUrl }}\",\n  \"totalPages\":    {{ $json.totalPages }},\n  \"status\":        \"pending\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-save-history",
+      "name": "Enregistrer Historique",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [6440, 120],
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.srv1591454.hstgr.cloud/webhook/add-story-history",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ email: $('Construire Livre Abonné').first().json.email, titre: $('Construire Livre Abonné').first().json.titre, theme: $('Construire Livre Abonné').first().json.theme, monthLabel: $('Construire Livre Abonné').first().json.monthLabel, resume: $('Construire Livre Abonné').first().json.resume }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wf5-done-notif",
+      "name": "Notif Admin Fin Génération",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1160, 520],
+      "parameters": {
+        "fromEmail": "izoahmet4@gmail.com",
+        "toEmail": "info@livreetvous.fr",
+        "subject": "=✅ Génération mensuelle terminée — {{ $('Lire Thème du Mois').first().json.monthLabel }}",
+        "html": "=<p>La génération mensuelle des livres abonnés est terminée.</p><p>Consultez le <a href=\"https://n8n.srv1591454.hstgr.cloud/webhook/dashboard\">tableau de bord</a> pour valider les livres avant impression.</p>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "x5nc93akV13XUKEN",
+          "name": "SMTP account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Déclencheur Mensuel": {
+      "main": [[{"node": "Lire Thème du Mois", "type": "main", "index": 0}]]
+    },
+    "Lire Thème du Mois": {
+      "main": [[{"node": "Charger Abonnés", "type": "main", "index": 0}]]
+    },
+    "Charger Abonnés": {
+      "main": [[{"node": "Parser Abonnés", "type": "main", "index": 0}]]
+    },
+    "Parser Abonnés": {
+      "main": [[{"node": "Split Abonnés", "type": "main", "index": 0}]]
+    },
+    "Split Abonnés": {
+      "main": [
+        [{"node": "Lire Historique Abonné", "type": "main", "index": 0}],
+        [{"node": "Notif Admin Fin Génération", "type": "main", "index": 0}]
+      ]
+    },
+    "Lire Historique Abonné": {
+      "main": [[{"node": "Fusionner Sub+Historique", "type": "main", "index": 0}]]
+    },
+    "Fusionner Sub+Historique": {
+      "main": [[{"node": "AI Agent Mensuel", "type": "main", "index": 0}]]
+    },
+    "Anthropic Model Mensuel": {
+      "ai_languageModel": [[{"node": "AI Agent Mensuel", "type": "ai_languageModel", "index": 0}]]
+    },
+    "AI Agent Mensuel": {
+      "main": [[{"node": "Parser Histoire", "type": "main", "index": 0}]]
+    },
+    "Parser Histoire": {
+      "main": [[{"node": "Préparer Images Ref", "type": "main", "index": 0}]]
+    },
+    "Préparer Images Ref": {
+      "main": [[{"node": "Upload Image KIE", "type": "main", "index": 0}]]
+    },
+    "Upload Image KIE": {
+      "main": [[{"node": "Construire Body KIE", "type": "main", "index": 0}]]
+    },
+    "Construire Body KIE": {
+      "main": [[{"node": "Soumettre Tâches KIE", "type": "main", "index": 0}]]
+    },
+    "Soumettre Tâches KIE": {
+      "main": [[{"node": "Stocker Task IDs", "type": "main", "index": 0}]]
+    },
+    "Stocker Task IDs": {
+      "main": [[{"node": "Attente KIE", "type": "main", "index": 0}]]
+    },
+    "Attente KIE": {
+      "main": [[{"node": "Vérifier Résultats KIE", "type": "main", "index": 0}]]
+    },
+    "Vérifier Résultats KIE": {
+      "main": [[{"node": "Analyser Résultats", "type": "main", "index": 0}]]
+    },
+    "Analyser Résultats": {
+      "main": [[{"node": "IF Échec", "type": "main", "index": 0}]]
+    },
+    "IF Échec": {
+      "main": [
+        [{"node": "Pages Échouées", "type": "main", "index": 0}],
+        [{"node": "Assembler Pages", "type": "main", "index": 0}]
+      ]
+    },
+    "Pages Échouées": {
+      "main": [[{"node": "Resoumettre KIE", "type": "main", "index": 0}]]
+    },
+    "Resoumettre KIE": {
+      "main": [[{"node": "Stocker Retry IDs", "type": "main", "index": 0}]]
+    },
+    "Stocker Retry IDs": {
+      "main": [[{"node": "Attente Retry", "type": "main", "index": 0}]]
+    },
+    "Attente Retry": {
+      "main": [[{"node": "Vérifier Retry", "type": "main", "index": 0}]]
+    },
+    "Vérifier Retry": {
+      "main": [[{"node": "Fusionner Résultats", "type": "main", "index": 0}]]
+    },
+    "Fusionner Résultats": {
+      "main": [[{"node": "Assembler Pages", "type": "main", "index": 0}]]
+    },
+    "Assembler Pages": {
+      "main": [[{"node": "Construire Livre Abonné", "type": "main", "index": 0}]]
+    },
+    "Construire Livre Abonné": {
+      "main": [[{"node": "Ajouter à la File", "type": "main", "index": 0}]]
+    },
+    "Ajouter à la File": {
+      "main": [[{"node": "Enregistrer Historique", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "instanceId": "fd227561ab929afb55eae983505e908b98685240698594c2a48a2651cf621aeb"
+  },
+  "tags": []
+}

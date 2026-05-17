@@ -1,0 +1,281 @@
+{
+  "name": "WF3b — Gestion Abonnés Livre&Vous",
+  "nodes": [
+    {
+      "id": "wf3b-save-wh",
+      "name": "POST /save-subscriber",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "save-subscriber",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "wf3b-save-subscriber"
+    },
+    {
+      "id": "wf3b-save-code",
+      "name": "Sauvegarder Abonné",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300],
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nif (!sd.subscribers) sd.subscribers = {};\nconst body = $input.first().json.body || $input.first().json;\nconst email = (body.email || '').toLowerCase().trim();\nif (!email) return [{json:{ok:false, error:'email manquant'}}];\nsd.subscribers[email] = {\n  ...body,\n  email,\n  active: body.active !== false,\n  savedAt: new Date().toISOString()\n};\nreturn [{json:{ok:true, email, total: Object.keys(sd.subscribers).length}}];"
+      }
+    },
+    {
+      "id": "wf3b-save-resp",
+      "name": "Répondre save",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [{"name": "Access-Control-Allow-Origin", "value": "*"}]
+          }
+        }
+      }
+    },
+    {
+      "id": "wf3b-get-wh",
+      "name": "GET /get-subscribers",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 520],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "get-subscribers",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "wf3b-get-subscribers"
+    },
+    {
+      "id": "wf3b-get-code",
+      "name": "Lire Abonnés",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 520],
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nconst all = Object.values(sd.subscribers || {});\nconst actifs = all.filter(s => s.active !== false && s.email && s.prenom);\nreturn [{json:{subscribers: actifs, total: actifs.length}}];"
+      }
+    },
+    {
+      "id": "wf3b-get-resp",
+      "name": "Répondre abonnés",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 520],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [{"name": "Access-Control-Allow-Origin", "value": "*"}]
+          }
+        }
+      }
+    },
+    {
+      "id": "wf3b-del-wh",
+      "name": "POST /deactivate-subscriber",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 740],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deactivate-subscriber",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "wf3b-deactivate-subscriber"
+    },
+    {
+      "id": "wf3b-del-code",
+      "name": "Désactiver Abonné",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 740],
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nif (!sd.subscribers) sd.subscribers = {};\nconst body = $input.first().json.body || $input.first().json;\nconst email = (body.email || '').toLowerCase().trim();\nif (sd.subscribers[email]) {\n  sd.subscribers[email].active = false;\n  sd.subscribers[email].deactivatedAt = new Date().toISOString();\n}\nreturn [{json:{ok:true, email, deactivated: !!sd.subscribers[email]}}];"
+      }
+    },
+    {
+      "id": "wf3b-hist-get-wh",
+      "name": "GET /get-story-history",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 960],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "get-story-history",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "wf3b-get-story-history"
+    },
+    {
+      "id": "wf3b-hist-get-code",
+      "name": "Lire Historique",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 960],
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nconst email = ($input.first().json.query?.email || '').toLowerCase().trim();\nconst history = (sd.storyHistory || {})[email] || [];\nreturn [{json:{email, history, total: history.length}}];"
+      }
+    },
+    {
+      "id": "wf3b-hist-get-resp",
+      "name": "Répondre historique",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 960],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [{"name": "Access-Control-Allow-Origin", "value": "*"}]
+          }
+        }
+      }
+    },
+    {
+      "id": "wf3b-hist-add-wh",
+      "name": "POST /add-story-history",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 1180],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "add-story-history",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "wf3b-add-story-history"
+    },
+    {
+      "id": "wf3b-hist-add-code",
+      "name": "Ajouter Historique",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 1180],
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nif (!sd.storyHistory) sd.storyHistory = {};\nconst body = $input.first().json.body || $input.first().json;\nconst email = (body.email || '').toLowerCase().trim();\nif (!email) return [{json:{ok:false, error:'email manquant'}}];\nif (!sd.storyHistory[email]) sd.storyHistory[email] = [];\nsd.storyHistory[email].push({\n  titre: body.titre || '',\n  theme: body.theme || '',\n  resume: body.resume || '',\n  monthLabel: body.monthLabel || '',\n  addedAt: new Date().toISOString()\n});\nreturn [{json:{ok:true, email, total: sd.storyHistory[email].length}}];"
+      }
+    },
+    {
+      "id": "wf3b-theme-set-wh",
+      "name": "POST /set-monthly-theme",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 1400],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "set-monthly-theme",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "wf3b-set-monthly-theme"
+    },
+    {
+      "id": "wf3b-theme-set-code",
+      "name": "Définir Thème Mensuel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 1400],
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nconst body = $input.first().json.body || $input.first().json;\nconst now = new Date();\nconst defaultLabel = now.toLocaleDateString('fr-FR', {month:'long', year:'numeric'});\nsd.monthlyTheme = {\n  theme: body.theme || 'Aventure du mois',\n  monthLabel: body.monthLabel || defaultLabel,\n  setAt: new Date().toISOString()\n};\nreturn [{json:{ok:true, ...sd.monthlyTheme}}];"
+      }
+    },
+    {
+      "id": "wf3b-theme-get-wh",
+      "name": "GET /get-monthly-theme",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 1620],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "get-monthly-theme",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "wf3b-get-monthly-theme"
+    },
+    {
+      "id": "wf3b-theme-get-code",
+      "name": "Lire Thème Mensuel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 1620],
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nconst now = new Date();\nconst defaultLabel = now.toLocaleDateString('fr-FR', {month:'long', year:'numeric'});\nconst themeData = sd.monthlyTheme || {theme: 'Aventure du mois', monthLabel: defaultLabel};\nreturn [{json: themeData}];"
+      }
+    },
+    {
+      "id": "wf3b-theme-get-resp",
+      "name": "Répondre thème",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 1620],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [{"name": "Access-Control-Allow-Origin", "value": "*"}]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "POST /save-subscriber": {
+      "main": [[{"node": "Sauvegarder Abonné", "type": "main", "index": 0}]]
+    },
+    "Sauvegarder Abonné": {
+      "main": [[{"node": "Répondre save", "type": "main", "index": 0}]]
+    },
+    "GET /get-subscribers": {
+      "main": [[{"node": "Lire Abonnés", "type": "main", "index": 0}]]
+    },
+    "Lire Abonnés": {
+      "main": [[{"node": "Répondre abonnés", "type": "main", "index": 0}]]
+    },
+    "POST /deactivate-subscriber": {
+      "main": [[{"node": "Désactiver Abonné", "type": "main", "index": 0}]]
+    },
+    "GET /get-story-history": {
+      "main": [[{"node": "Lire Historique", "type": "main", "index": 0}]]
+    },
+    "Lire Historique": {
+      "main": [[{"node": "Répondre historique", "type": "main", "index": 0}]]
+    },
+    "POST /add-story-history": {
+      "main": [[{"node": "Ajouter Historique", "type": "main", "index": 0}]]
+    },
+    "POST /set-monthly-theme": {
+      "main": [[{"node": "Définir Thème Mensuel", "type": "main", "index": 0}]]
+    },
+    "GET /get-monthly-theme": {
+      "main": [[{"node": "Lire Thème Mensuel", "type": "main", "index": 0}]]
+    },
+    "Lire Thème Mensuel": {
+      "main": [[{"node": "Répondre thème", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "instanceId": "fd227561ab929afb55eae983505e908b98685240698594c2a48a2651cf621aeb"
+  },
+  "tags": []
+}

@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulation WF5 — Génération Mensuelle Livre&Vous</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+header{background:#1a1d27;border-bottom:1px solid #2d3748;padding:12px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+header h1{font-size:16px;font-weight:600}
+.badge{background:#4f46e5;color:white;font-size:10px;padding:2px 8px;border-radius:12px}
+.subtitle{margin-left:auto;font-size:11px;color:#6b7280}
+.layout{display:grid;grid-template-columns:260px 1fr;flex:1;overflow:hidden}
+
+/* Sidebar */
+.sidebar{background:#13161f;border-right:1px solid #2d3748;overflow-y:auto;padding:8px 0}
+.step-item{display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
+.step-item:hover{background:#1e2130}
+.step-item.active{background:#1e2130;border-left-color:#4f46e5}
+.step-item.done{opacity:.7}
+.step-dot{width:8px;height:8px;border-radius:50%;background:#2d3748;flex-shrink:0}
+.step-item.done .step-dot{background:#10b981}
+.step-item.active .step-dot{background:#4f46e5;box-shadow:0 0 0 3px #4f46e522}
+.step-meta{min-width:0}
+.step-num{font-size:10px;color:#4b5563}
+.step-title{font-size:12px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step-item.active .step-title{color:#c7d2fe}
+
+/* Detail panel */
+.detail{display:flex;flex-direction:column;overflow:hidden}
+.node-header{background:#1a1d27;padding:16px 20px;border-bottom:1px solid #2d3748;flex-shrink:0}
+.prog-bar{height:3px;background:#1e2130;margin-bottom:12px;border-radius:2px}
+.prog-fill{height:100%;background:linear-gradient(90deg,#4f46e5,#818cf8);border-radius:2px;transition:width .3s}
+.node-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.node-icon{font-size:22px}
+.node-name{font-size:16px;font-weight:600}
+.type-chip{font-size:10px;padding:2px 8px;border-radius:4px;font-weight:500}
+.t-trigger{background:#7c3aed22;color:#a78bfa;border:1px solid #7c3aed55}
+.t-http{background:#0369a122;color:#38bdf8;border:1px solid #0369a155}
+.t-code{background:#d9770622;color:#fb923c;border:1px solid #d9770655}
+.t-ai{background:#05966922;color:#34d399;border:1px solid #05966955}
+.t-wait{background:#92400e22;color:#fbbf24;border:1px solid #92400e55}
+.t-if{background:#75197022;color:#e879f9;border:1px solid #75197055}
+.t-email{background:#0f5a6b22;color:#67e8f9;border:1px solid #0f5a6b55}
+.t-split{background:#1f2d1022;color:#86efac;border:1px solid #1f2d1055}
+.status-pill{margin-left:auto;font-size:11px;display:flex;align-items:center;gap:5px}
+.sdot{width:7px;height:7px;border-radius:50%}
+.s-run .sdot{background:#4f46e5}
+.s-done .sdot{background:#10b981}
+.node-desc{font-size:12px;color:#9ca3af;line-height:1.5}
+
+/* Tabs */
+.tabs{display:flex;background:#13161f;border-bottom:1px solid #2d3748;flex-shrink:0}
+.tab{padding:9px 16px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:none;color:#6b7280;border-bottom:2px solid transparent;transition:all .15s}
+.tab:hover{color:#d1d5db}
+.tab.active{color:#818cf8;border-bottom-color:#818cf8}
+
+/* Body */
+.tab-body{flex:1;overflow-y:auto;padding:16px 20px;background:#0f1117}
+.block{background:#1a1d27;border:1px solid #2d3748;border-radius:8px;padding:14px;margin-bottom:12px;font-size:12px}
+.block-title{color:#818cf8;font-weight:600;margin-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+pre.code{font-family:'Courier New',monospace;font-size:11px;line-height:1.7;color:#d1d5db;white-space:pre-wrap;word-break:break-all}
+.kw{color:#c084fc}.fn{color:#60a5fa}.str{color:#86efac}.cm{color:#4b5563;font-style:italic}.num{color:#fb923c}.ki{color:#f9a8d4}
+.jk{color:#818cf8}.jv{color:#86efac}.jn{color:#fb923c}.jb{color:#f472b6}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.grid-5{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.card{background:#13161f;border:1px solid #2d3748;border-radius:6px;padding:10px;font-size:11px}
+.card .cn{color:#818cf8;font-weight:600;margin-bottom:3px}
+.card .cv{color:#9ca3af;line-height:1.4}
+.tag-ok{background:#10b98122;color:#10b981;padding:1px 6px;border-radius:4px;font-size:10px}
+.tag-wait{background:#fbbf2422;color:#fbbf24;padding:1px 6px;border-radius:4px;font-size:10px}
+.img-thumb{aspect-ratio:16/9;background:linear-gradient(135deg,#1e2130,#2d3748);border:1px solid #374151;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.img-thumb .it-num{font-size:11px;color:#818cf8;font-weight:600}
+.img-thumb .it-ok{font-size:16px}
+.arrow{text-align:center;color:#374151;padding:6px 0;font-size:18px}
+.prompt-box{background:#0d1117;border:1px solid #2d3748;border-radius:8px;padding:14px;font-family:'Courier New',monospace;font-size:11px;line-height:1.7;color:#d1d5db;max-height:320px;overflow-y:auto;white-space:pre-wrap}
+.section-h{font-size:10px;font-weight:700;color:#4f46e5;letter-spacing:1px;margin:10px 0 4px;text-transform:uppercase}
+.badge-count{background:#4f46e522;color:#818cf8;border:1px solid #4f46e555;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600}
+
+/* Controls */
+.controls{background:#1a1d27;border-top:1px solid #2d3748;padding:10px 20px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.ctl-info{font-size:11px;color:#6b7280;margin-right:auto}
+.btn{padding:7px 14px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:500;transition:all .15s}
+.btn-sec{background:#2d3748;color:#d1d5db}.btn-sec:hover{background:#374151}
+.btn-pri{background:#4f46e5;color:white}.btn-pri:hover{background:#4338ca}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-play{min-width:110px}
+</style>
+</head>
+<body>
+<header>
+  <span style="font-size:20px">📚</span>
+  <h1>WF5 — Simulation d'exécution</h1>
+  <span class="badge">Génération Mensuelle</span>
+  <span class="subtitle">Abonné simulé : Emma, 6 ans, Fille · Thème : L'aventure à la plage · juin 2026</span>
+</header>
+<div class="layout">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="detail">
+    <div class="node-header">
+      <div class="prog-bar"><div class="prog-fill" id="prog"></div></div>
+      <div class="node-row">
+        <span class="node-icon" id="ni">⏰</span>
+        <div>
+          <div class="node-name" id="nn">—</div>
+          <div style="display:flex;gap:8px;margin-top:4px;align-items:center">
+            <span class="type-chip" id="nt">—</span>
+            <span class="status-pill s-run" id="sp"><span class="sdot"></span><span id="st">En cours</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="node-desc" id="nd">—</div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="t-input" onclick="tab('input')">📥 Entrée</button>
+      <button class="tab" id="t-proc" onclick="tab('proc')">⚙️ Traitement</button>
+      <button class="tab" id="t-out" onclick="tab('out')">📤 Sortie</button>
+    </div>
+    <div class="tab-body" id="body"></div>
+  </div>
+</div>
+<div class="controls">
+  <div class="ctl-info" id="ci">Étape 1 / 24</div>
+  <button class="btn btn-sec" id="bp" onclick="prev()">◀ Précédent</button>
+  <button class="btn btn-pri btn-play" id="bpl" onclick="togglePlay()">▶ Lecture auto</button>
+  <button class="btn btn-sec" id="bn" onclick="next()">Suivant ▶</button>
+</div>
+
+<script>
+// ─── Simulated data ───────────────────────────────────────────────────────────
+const SUB = {
+  email:"marie.dupont@gmail.com", firstName:"Marie", lastName:"Dupont",
+  address1:"12 rue des Lilas", city:"Lyon", postcode:"69001", country:"FR",
+  phone:"+33612345678", customerId:"7834291045", orderId:"LV-2026-00342",
+  prenom:"Emma", age:"6", genre:"Fille",
+  imageRef:"https://res.cloudinary.com/livreetvous/image/upload/v1/emma_ref_001.jpg",
+  coupe:"Boucles", couleur:"Dorée", yeux:"Verts", sourcils:"Fins",
+  lunettes:"Non", accessoires:"Barrettes étoiles",
+  hasSecondChar:false, couverture:"Rigide - 20x20 cm",
+  active:true, subscribedAt:"2026-03-15T10:23:00.000Z", booksGenerated:2
+};
+const THEME = { theme:"L'aventure à la plage", monthLabel:"juin 2026", setAt:"2026-05-28T14:30:00.000Z" };
+const STORY = {
+  prenom:"Emma", titre:"Emma et le trésor des vagues",
+  resume:"Emma découvre un mystérieux message dans une bouteille sur la plage de Saint-Malo. Guidée par un crabe espiègle nommé Léo, elle suit des indices cachés dans les rochers jusqu'à trouver un trésor inattendu.",
+  pages:[
+    {numero:1,texte_page:"",prompt_illustration:"3D Pixar CGI animation style, Disney-Pixar quality render, children book illustration, wide scene. COVER: characters in bottom right, vivid beach scene, golden light, turquoise sea. Girl, 6 years old, curly golden hair, green eyes, star barrettes, in the right third. Warm sunny atmosphere."},
+    {numero:2,texte_page:"Ce matin-là, Emma courut vers les vagues en criant de joie. La mer était turquoise et le sable brillait comme de l'or.",prompt_illustration:"3D Pixar CGI animation style, wide beach scene, Emma running toward the waves, left third, golden sand, turquoise water, sunny blue sky."},
+    {numero:3,texte_page:"Tout à coup, elle remarqua une bouteille verte coincée entre deux rochers. Il y avait quelque chose à l'intérieur !",prompt_illustration:"3D Pixar CGI animation style, Emma crouching by a green bottle in rocks, right third, rocky beach, curious expression, sea foam around rocks."},
+    {numero:4,texte_page:"Emma sortit un vieux bout de papier froissé. On y voyait un dessin mystérieux : une carte avec des croix et des flèches.",prompt_illustration:"3D Pixar CGI animation style, Emma holding a rolled paper map, left third, examining it with wide eyes, beach background, afternoon light."},
+    {numero:5,texte_page:"— C'est un message !, s'exclama-t-elle. Quelqu'un a caché un trésor sur cette plage !",prompt_illustration:"3D Pixar CGI animation style, Emma excited, holding map up, right third, beach and sea behind, big smile, star barrettes sparkling."},
+    {numero:6,texte_page:"Soudain, une voix grommela : — Hé ! C'est MON message ! Emma regarda en bas et vit un petit crabe roux qui la fixait.",prompt_illustration:"3D Pixar CGI animation style, Emma looking down at a small orange crab on the sand, left third, crab has expressive eyes, tide pools background."},
+    {numero:7,texte_page:"— Je m'appelle Léo, dit le crabe. Je gardais ce trésor depuis si longtemps que j'ai oublié où il est !",prompt_illustration:"3D Pixar CGI animation style, Emma kneeling to talk to Léo the crab, right third, both looking at the map together, golden afternoon light."},
+    {numero:8,texte_page:"Emma rit. — Ne t'inquiète pas, Léo ! Je vais t'aider à le retrouver. Cherchons ensemble !",prompt_illustration:"3D Pixar CGI animation style, Emma and Léo side by side looking at map, left third, determination on Emma's face, beach stretching behind."},
+    {numero:9,texte_page:"La première croix indiquait un grand rocher en forme de chapeau. Emma et Léo coururent le long du rivage.",prompt_illustration:"3D Pixar CGI animation style, Emma running on wet sand with Léo riding on her shoulder, right third, rock shaped like a hat in the background."},
+    {numero:10,texte_page:"Sous le rocher, ils trouvèrent une boîte en métal rouillée. À l'intérieur : une deuxième carte avec une nouvelle flèche.",prompt_illustration:"3D Pixar CGI animation style, Emma and Léo opening a rusty metal box, left third, another map visible inside, sun reflecting off the tin."},
+    {numero:11,texte_page:"La carte les menait vers les dunes de sable. Emma escalada la plus haute en portant Léo sur son épaule.",prompt_illustration:"3D Pixar CGI animation style, Emma climbing a tall sand dune, right third, Léo on her shoulder, vast beach panorama below, blue sky."},
+    {numero:12,texte_page:"De là-haut, elle vit l'ombre d'un palmier dessiner exactement la forme indiquée sur la carte. Voilà le bon endroit !",prompt_illustration:"3D Pixar CGI animation style, Emma pointing excitedly from the top of a dune, left third, palm tree shadow on sand below, triumphant expression."},
+    {numero:13,texte_page:"Emma creusa avec ses mains dans le sable chaud. Au bout d'un moment, ses doigts touchèrent quelque chose de dur.",prompt_illustration:"3D Pixar CGI animation style, Emma digging in the sand near a palm tree, right third, focused look, Léo watching beside her, sand flying."},
+    {numero:14,texte_page:"C'était un coffret en bois sculpté, rempli de jolis coquillages multicolores et d'un écrin de velours bleu.",prompt_illustration:"3D Pixar CGI animation style, Emma lifting a wooden chest from the sand, left third, colorful shells spilling out, blue velvet box inside, glowing light."},
+    {numero:15,texte_page:"Dans l'écrin, une belle perle brillait comme une étoile. — C'est magnifique !, souffla Emma. Léo pinça ses petites pinces de bonheur.",prompt_illustration:"3D Pixar CGI animation style, Emma holding a glowing pearl, right third, Léo clapping his claws joyfully, sunset beach, warm golden light."}
+  ]
+};
+const TASK_IDS = ["t7f2a1b9c3d4e5","t8g3b2c0d5e6f7","t9h4c3d1e6f7g8","ta5d4e2f7g8h9i","tb6e5f3g8h9i0j",
+  "tc7f6g4h9i0j1k","td8g7h5i0j1k2l","te9h8i6j1k2l3m","tf0i9j7k2l3m4n","tg1j0k8l3m4n5o",
+  "th2k1l9m4n5o6p","ti3l2m0n5o6p7q","tj4m3n1o6p7q8r","tk5n4o2p7q8r9s","tl6o5p3q8r9s0t"];
+const ORDER_REF = "ABO-LV-2026-00342-1748782800000";
+
+// ─── Step definitions ─────────────────────────────────────────────────────────
+const STEPS = [
+  { name:"Déclencheur Mensuel", icon:"⏰", cls:"t-trigger", type:"Schedule Trigger",
+    desc:"Le workflow se déclenche automatiquement le 1er de chaque mois à 9h00 (cron : 0 9 1 * *).",
+    inp:`<div class="block"><div class="block-title">Déclencheur planifié</div><pre class="code"><span class="kw">cron</span>: <span class="str">"0 9 1 * *"</span>
+→ Le 1er de chaque mois à 09:00 UTC
+
+<span class="cm">Aucune donnée en entrée — le schedule démarre l'exécution.</span></pre></div>`,
+    proc:`<div class="block"><div class="block-title">Logique du nœud</div><pre class="code"><span class="cm">// Schedule Trigger — n8n-nodes-base.scheduleTrigger</span>
+<span class="cm">// Se réveille le 1er juin 2026 à 09:00:00</span>
+<span class="cm">// Démarre l'exécution du workflow</span>
+<span class="cm">// Aucune configuration requise</span></pre></div>`,
+    out:`<div class="block"><div class="block-title">Données émises</div><pre class="code">${jh({scheduledTime:"2026-06-01T09:00:00.000Z"})}</pre></div>` },
+
+  { name:"Lire Thème du Mois", icon:"🎨", cls:"t-http", type:"HTTP GET",
+    desc:"Lecture du thème mensuel configuré à l'avance par l'admin via POST /set-monthly-theme dans WF3b.",
+    inp:`<div class="block"><div class="block-title">Requête HTTP</div><pre class="code"><span class="kw">GET</span> <span class="str">https://n8n.srv1591454.hstgr.cloud/webhook/get-monthly-theme</span></pre></div>`,
+    proc:`<div class="block"><div class="block-title">Logique WF3b — Lire Thème Mensuel</div><pre class="code"><span class="kw">const</span> sd = <span class="fn">$getWorkflowStaticData</span>(<span class="str">'global'</span>);
+<span class="kw">const</span> themeData = sd.monthlyTheme || { theme: <span class="str">'Aventure du mois'</span>, monthLabel: defaultLabel };
+<span class="kw">return</span> [{ json: themeData }];</pre></div>`,
+    out:`<div class="block"><div class="block-title">Réponse reçue</div><pre class="code">${jh(THEME)}</pre></div>` },
+
+  { name:"Charger Abonnés", icon:"👥", cls:"t-http", type:"HTTP GET",
+    desc:"Récupère la liste de tous les abonnés actifs depuis WF3b (filtre : active=true, email + prénom présents).",
+    inp:`<div class="block"><div class="block-title">Requête HTTP</div><pre class="code"><span class="kw">GET</span> <span class="str">https://n8n.srv1591454.hstgr.cloud/webhook/get-subscribers</span></pre></div>`,
+    proc:`<div class="block"><div class="block-title">Logique WF3b — Lire Abonnés</div><pre class="code"><span class="kw">const</span> all = Object.values(sd.subscribers || {});
+<span class="kw">const</span> actifs = all.<span class="fn">filter</span>(s => s.active !== <span class="kw">false</span> && s.email && s.prenom);
+<span class="kw">return</span> [{ json: { subscribers: actifs, total: actifs.length } }];</pre></div>`,
+    out:`<div class="block"><div class="block-title">Réponse — 1 abonné actif</div><pre class="code">${jh({subscribers:[SUB],total:1})}</pre></div>` },
+
+  { name:"Parser Abonnés", icon:"⚙️", cls:"t-code", type:"Code",
+    desc:"Ajoute le thème et le mois à chaque abonné pour qu'ils soient disponibles tout au long du pipeline.",
+    inp:`<div class="block"><div class="block-title">Entrée — liste abonnés + thème</div><pre class="code">• <span class="num">1</span> abonné reçu depuis Charger Abonnés
+• Thème lu depuis Lire Thème du Mois : <span class="str">"L'aventure à la plage"</span></pre></div>`,
+    proc:`<div class="block"><div class="block-title">Code</div><pre class="code"><span class="kw">const</span> subscribers = response.subscribers || [];
+<span class="kw">const</span> themeData = <span class="fn">$</span>(<span class="str">'Lire Thème du Mois'</span>).first().json;
+<span class="kw">const</span> theme = themeData.theme || <span class="str">'Aventure du mois'</span>;
+<span class="kw">const</span> monthLabel = themeData.monthLabel || ...;
+
+<span class="kw">return</span> subscribers.<span class="fn">map</span>(sub => ({
+  json: { ...sub, theme, monthLabel }
+}));</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie — 1 item avec thème injecté</div><pre class="code">${jh({...SUB,...THEME})}</pre></div>` },
+
+  { name:"Split Abonnés", icon:"🔀", cls:"t-split", type:"SplitInBatches",
+    desc:"Traite les abonnés un par un (batchSize=1). Chaque batch lance tout le pipeline de génération de livre en séquence.",
+    inp:`<div class="block"><div class="block-title">Entrée — 1 abonné à traiter</div><pre class="code">Batch <span class="num">1</span> / <span class="num">1</span> — Emma (marie.dupont@gmail.com)</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Comportement du nœud</div><pre class="code"><span class="cm">// SplitInBatches — batchSize: 1</span>
+<span class="cm">// Sortie 0 (loop) → pipeline de génération par abonné</span>
+<span class="cm">// Sortie 1 (done) → Notif Admin quand tous traités</span>
+
+<span class="cm">Abonnés restants à traiter : 1
+→ Branche LOOP activée</span></pre></div>`,
+    out:`<div class="block"><div class="block-title">Item émis — Emma</div><pre class="code">${jh({...SUB,...THEME})}</pre></div>` },
+
+  { name:"Lire Historique Abonné", icon:"📜", cls:"t-http", type:"HTTP GET",
+    desc:"Récupère l'historique des histoires déjà générées pour cet abonné afin d'éviter toute répétition.",
+    inp:`<div class="block"><div class="block-title">Requête HTTP</div><pre class="code"><span class="kw">GET</span> <span class="str">https://n8n.srv1591454.hstgr.cloud/webhook/get-story-history</span>
+    <span class="str">?email=marie.dupont%40gmail.com</span>
+
+<span class="cm">// Email pris depuis $json.email du Split courant</span></pre></div>`,
+    proc:`<div class="block"><div class="block-title">Logique WF3b — Lire Historique</div><pre class="code"><span class="kw">const</span> email = ($input.first().json.query?.email || <span class="str">''</span>).<span class="fn">toLowerCase</span>().trim();
+<span class="kw">const</span> history = (sd.storyHistory || {})[email] || [];
+<span class="kw">return</span> [{ json: { email, history, total: history.length } }];</pre></div>`,
+    out:`<div class="block"><div class="block-title">Réponse — Premier mois, pas d'historique</div><pre class="code">${jh({email:"marie.dupont@gmail.com",history:[],total:0})}</pre></div>` },
+
+  { name:"Fusionner Sub+Historique", icon:"🔗", cls:"t-code", type:"Code",
+    desc:"Fusionne les données de l'abonné (Split) avec son historique d'histoires et prépare le texte à injecter dans le prompt.",
+    inp:`<div class="block"><div class="block-title">Entrée — réponse historique</div><pre class="code">${jh({email:"marie.dupont@gmail.com",history:[],total:0})}</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Code</div><pre class="code"><span class="kw">const</span> sub = <span class="fn">$</span>(<span class="str">'Split Abonnés'</span>).item.json; <span class="cm">// données Emma</span>
+<span class="kw">const</span> history = histResp.history || [];
+
+<span class="kw">const</span> historyText = history.length === <span class="num">0</span>
+  ? <span class="str">'Aucune histoire précédente pour cet abonné.'</span>
+  : history.<span class="fn">map</span>((h,i) => \`\${i+1}. "\${h.titre}" — Thème: \${h.theme}...\`).<span class="fn">join</span>(<span class="str">'\\n'</span>);
+
+<span class="kw">return</span> [{ json: { ...sub, storyHistory: history, storyHistoryText: historyText } }];</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie — abonné enrichi</div><pre class="code">${jh({...SUB,...THEME,storyHistory:[],storyHistoryText:"Aucune histoire précédente pour cet abonné."})}</pre></div>` },
+
+  { name:"AI Agent Mensuel", icon:"🤖", cls:"t-ai", type:"AI Agent (Claude Sonnet 4.6)",
+    desc:"Génère une histoire de 15 pages complète et originale en JSON, basée sur le thème du mois et le profil d'Emma.",
+    inp:`<div class="block"><div class="block-title">Prompt envoyé à Claude Sonnet 4.6</div>
+<div class="prompt-box">Voici une commande abonnement mensuel Livre&Vous :
+
+--- THÈME DU MOIS ---
+Thème : L'aventure à la plage
+Mois : juin 2026
+
+--- HISTOIRES PRÉCÉDENTES DE CET ABONNÉ (À NE PAS RÉPÉTER) ---
+Aucune histoire précédente pour cet abonné.
+
+⚠️ La nouvelle histoire doit avoir une trame, des décors et une aventure ENTIÈREMENT DIFFÉRENTS de ceux listés ci-dessus.
+
+--- PERSONNAGE PRINCIPAL ---
+Prénom : Emma
+Âge : 6
+Genre : Fille
+Coupe : Boucles
+Couleur cheveux : Dorée
+Couleur yeux : Verts
+
+--- PERSONNAGE SECONDAIRE ---
+Présent : Non
+
+L'histoire DOIT être entièrement basée sur le thème du mois et adaptée à l'âge de l'enfant. Génère exactement 15 pages.</div></div>`,
+    proc:`<div class="block"><div class="block-title">Règles système (system message)</div><pre class="code"><span class="cm">• Texte adapté à 6 ans : 1-2 phrases par page</span>
+<span class="cm">• Basé 100% sur le thème "L'aventure à la plage"</span>
+<span class="cm">• UNICITÉ ABSOLUE : trame, décors, aventure originaux</span>
+<span class="cm">• Prompts illustration : 3D Pixar CGI, personnage à droite/gauche en alternance</span>
+<span class="cm">• FORMAT JSON STRICT — sans markdown</span>
+<span class="cm">• Page 1 = couverture (sans texte, scène lumineuse)</span></pre></div>
+<div class="block"><div class="block-title">Modèle</div><pre class="code">claude-sonnet-4-6 · max_tokens: 4096 · temperature: 1</pre></div>`,
+    out:`<div class="block"><div class="block-title">JSON généré par Claude</div><pre class="code">{
+  "prenom": "Emma",
+  "titre": "Emma et le trésor des vagues",
+  "resume": "Emma découvre un mystérieux message dans une bouteille sur la plage de Saint-Malo. Guidée par un crabe espiègle nommé Léo, elle suit des indices cachés dans les rochers jusqu'à trouver un trésor inattendu.",
+  "pages": [
+    { "numero": 1, "texte_page": "", "prompt_illustration": "3D Pixar CGI animation style, ..." },
+    { "numero": 2, "texte_page": "Ce matin-là, Emma courut vers les vagues en criant de joie...", "prompt_illustration": "..." },
+    <span class="cm">// ... 13 autres pages</span>
+  ]
+}</pre></div>` },
+
+  { name:"Parser Histoire", icon:"📖", cls:"t-code", type:"Code",
+    desc:"Parse le JSON de Claude, génère 15 items (un par page) en ajoutant les données abonné à chacun pour qu'elles restent disponibles jusqu'à la fin.",
+    inp:`<div class="block"><div class="block-title">Entrée — JSON brut de Claude</div><pre class="code">output: <span class="str">'{ "prenom": "Emma", "titre": "Emma et le trésor des vagues", "pages": [...] }'</span></pre></div>`,
+    proc:`<div class="block"><div class="block-title">Code</div><pre class="code"><span class="kw">const</span> sub = <span class="fn">$</span>(<span class="str">'Split Abonnés'</span>).item.json;
+parsed = JSON.<span class="fn">parse</span>(output);
+
+<span class="kw">return</span> parsed.pages.<span class="fn">slice</span>(<span class="num">0</span>,<span class="num">15</span>).<span class="fn">map</span>(page => ({
+  json: {
+    page: page.numero, texte: page.texte_page,
+    prompt: <span class="str">\`3D Pixar CGI... \${page.prompt_illustration}\`</span>,
+    prenom, titre, resume, <span class="cm">// + toutes les données abonné</span>
+    email, address1, city, postcode, theme, monthLabel, ...
+  }
+}));</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie — 15 items <span class="badge-count">×15</span></div>
+<div class="grid-3" style="margin-top:8px">${STORY.pages.slice(0,6).map(p=>`<div class="card"><div class="cn">Page ${p.numero}</div><div class="cv">${p.texte_page||'(couverture)'}</div></div>`).join('')}<div class="card" style="display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:20px">+9</div></div></div>` },
+
+  { name:"Préparer Images Ref", icon:"🖼️", cls:"t-code", type:"Code",
+    desc:"Prépare les URLs des images de référence du personnage à uploader sur KIE pour le traitement img2img.",
+    inp:`<div class="block"><div class="block-title">Entrée — 1er item des pages (a imageRef)</div><pre class="code">imageRef: <span class="str">"https://res.cloudinary.com/livreetvous/.../emma_ref_001.jpg"</span>
+hasSecondChar: <span class="kw">false</span></pre></div>`,
+    proc:`<div class="block"><div class="block-title">Code</div><pre class="code"><span class="kw">const</span> uploads = [{ json: { fileUrl: item.imageRef, fileName: <span class="str">\`ref1_\${Date.now()}.png\`</span>, isMain: <span class="kw">true</span> } }];
+<span class="cm">// Pas de personnage secondaire → un seul fichier à uploader</span>
+<span class="kw">return</span> uploads;</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie — 1 upload à effectuer</div><pre class="code">${jh({fileUrl:"https://res.cloudinary.com/livreetvous/image/upload/v1/emma_ref_001.jpg",uploadPath:"images",fileName:"ref1_1748782800000.png",isMain:true})}</pre></div>` },
+
+  { name:"Upload Image KIE", icon:"⬆️", cls:"t-http", type:"HTTP POST",
+    desc:"Uploade la photo de référence d'Emma sur le serveur KIE pour qu'elle soit utilisée dans tous les prompts img2img.",
+    inp:`<div class="block"><div class="block-title">Requête</div><pre class="code"><span class="kw">POST</span> <span class="str">https://kieai.redpandaai.co/api/file-url-upload</span>
+Authorization: Bearer 778cbd7d...
+
+{ "fileUrl": "https://res.cloudinary.com/.../emma_ref_001.jpg", "uploadPath": "images", "fileName": "ref1_1748782800000.png" }</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Traitement KIE</div><pre class="code"><span class="cm">KIE télécharge et héberge l'image de référence</span>
+<span class="cm">Génère une URL permanente utilisable dans les prompts img2img</span></pre></div>`,
+    out:`<div class="block"><div class="block-title">Réponse KIE</div><pre class="code">${jh({data:{downloadUrl:"https://storage.kie.ai/uploads/ref1_1748782800000.png",fileId:"kie_ref_a7f3b2c1"}})}</pre></div>` },
+
+  { name:"Construire Body KIE", icon:"🔧", cls:"t-code", type:"Code",
+    desc:"Construit les 15 corps de requête KIE (un par page) avec l'image de référence uploadée et le prompt de l'illustration.",
+    inp:`<div class="block"><div class="block-title">Entrées</div><pre class="code">• Upload ref → downloadUrl: <span class="str">"https://storage.kie.ai/uploads/ref1_..."</span>
+• Parser Histoire → <span class="num">15</span> pages avec prompts</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Code</div><pre class="code">pages.<span class="fn">map</span>(page => ({
+  json: {
+    ...page.json,
+    kieBody: JSON.<span class="fn">stringify</span>({
+      model: <span class="str">'nano-banana-2'</span>,
+      input: {
+        prompt: page.json.prompt,
+        image_input: [kieRef1], <span class="cm">// URL de référence uploadée</span>
+        aspect_ratio: <span class="str">'16:9'</span>,
+        resolution: <span class="str">'1K'</span>,
+        output_format: <span class="str">'png'</span>
+      }
+    })
+  }
+}));</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie — 15 kieBody <span class="badge-count">×15</span></div><pre class="code">{
+  model: "nano-banana-2",
+  input: { prompt: "3D Pixar CGI animation style...", image_input: ["https://storage.kie.ai/uploads/ref1_..."], aspect_ratio: "16:9", resolution: "1K" }
+}
+<span class="cm">× 15 items (une par page)</span></pre></div>` },
+
+  { name:"Soumettre Tâches KIE", icon:"🚀", cls:"t-http", type:"HTTP POST ×15",
+    desc:"Envoie les 15 tâches de génération d'image en parallèle à l'API KIE. Chaque tâche génère une illustration via img2img.",
+    inp:`<div class="block"><div class="block-title">15 requêtes POST</div><pre class="code"><span class="kw">POST</span> <span class="str">https://api.kie.ai/api/v1/jobs/createTask</span> × <span class="num">15</span>
+Authorization: Bearer 778cbd7d...</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Traitement</div><pre class="code"><span class="cm">KIE met les 15 tâches en file d'attente GPU</span>
+<span class="cm">Génération img2img : le personnage d'Emma est inséré dans chaque scène</span>
+<span class="cm">Temps estimé : ~400 secondes pour 15 images 1K</span></pre></div>`,
+    out:`<div class="block"><div class="block-title">Task IDs reçus <span class="badge-count">×15</span></div>
+<div class="grid-5" style="margin-top:8px">${TASK_IDS.map((id,i)=>`<div class="card"><div class="cn">P${i+1}</div><div class="cv">${id}</div><span class="tag-wait">queued</span></div>`).join('')}</div></div>` },
+
+  { name:"Stocker Task IDs", icon:"💾", cls:"t-code", type:"Code",
+    desc:"Associe chaque taskId KIE à ses données de page correspondantes pour pouvoir récupérer les résultats plus tard.",
+    inp:`<div class="block"><div class="block-title">Entrées</div><pre class="code">• <span class="num">15</span> réponses KIE avec taskId
+• <span class="num">15</span> items pages de Construire Body KIE</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Code</div><pre class="code">items.<span class="fn">map</span>((item, index) => ({
+  json: {
+    taskId: item.json.data?.taskId,
+    page: pagesData[index]?.json?.page || index + <span class="num">1</span>,
+    texte: pagesData[index]?.json?.texte,
+    kieBody: pagesData[index]?.json?.kieBody,
+    <span class="cm">// + toutes les données abonné...</span>
+  }
+}));</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie — 15 items avec taskId + données page</div><pre class="code">${jh({taskId:"t7f2a1b9c3d4e5",page:1,texte:"",prenom:"Emma",titre:"Emma et le trésor des vagues",email:"marie.dupont@gmail.com"})}<span class="cm">... × 15</span></pre></div>` },
+
+  { name:"Attente KIE", icon:"⏳", cls:"t-wait", type:"Wait Node",
+    desc:"Pause de 400 secondes (~6 min 40s) pour laisser le temps aux 15 GPUs KIE de terminer la génération des illustrations.",
+    inp:`<div class="block"><div class="block-title">Configuration</div><pre class="code">amount: <span class="num">400</span>
+unit: <span class="str">"seconds"</span>
+
+<span class="cm">Le workflow est suspendu pendant 6 minutes 40 secondes.
+n8n reprend automatiquement sans aucune intervention.</span></pre></div>`,
+    proc:`<div class="block"><div class="block-title">Pendant l'attente…</div><pre class="code">09:00:00 → Tâches soumises à KIE ⬆️
+09:00:05 → Workflow suspendu ⏸️
+          KIE génère 15 illustrations en parallèle
+          Sur serveur GPU dédié nano-banana-2
+          img2img : Emma apparaît dans chaque scène
+09:06:40 → Workflow reprend ▶️</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie (inchangée)</div><pre class="code"><span class="cm">Les 15 items passent tels quels au nœud suivant.
+La pause n'altère pas les données.</span></pre></div>` },
+
+  { name:"Vérifier Résultats KIE", icon:"🔍", cls:"t-http", type:"HTTP GET ×15",
+    desc:"Interroge l'API KIE pour récupérer l'état et les URLs des 15 illustrations générées.",
+    inp:`<div class="block"><div class="block-title">15 requêtes polling</div><pre class="code"><span class="kw">GET</span> <span class="str">https://api.kie.ai/api/v1/jobs/recordInfo?taskId={id}</span> × <span class="num">15</span>
+Authorization: Bearer 778cbd7d...</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Traitement</div><pre class="code"><span class="cm">KIE retourne l'état de chaque tâche</span>
+<span class="cm">state: "success" → resultJson contient l'URL de l'image</span>
+<span class="cm">state: "pending" → pas encore terminé (→ retry)</span></pre></div>`,
+    out:`<div class="block"><div class="block-title">Réponses — Toutes terminées avec succès</div><pre class="code">${jh({data:{taskId:"t7f2a1b9c3d4e5",state:"success",resultJson:'{"resultUrls":["https://storage.kie.ai/results/WF5_emma_p01.png"]}'}})}<span class="cm">... × 15 (toutes state: "success")</span></pre></div>` },
+
+  { name:"Analyser Résultats", icon:"🔎", cls:"t-code", type:"Code",
+    desc:"Parse les résultats KIE, extrait les URLs des images, détecte les éventuels échecs pour le retry.",
+    inp:`<div class="block"><div class="block-title">Entrée — 15 réponses KIE</div><pre class="code">Toutes les <span class="num">15</span> tâches ont <span class="str">state: "success"</span>
+<span class="cm">→ failed = false pour toutes</span></pre></div>`,
+    proc:`<div class="block"><div class="block-title">Code</div><pre class="code"><span class="kw">const</span> success = data?.state === <span class="str">'success'</span> && data?.resultJson !== <span class="str">''</span>;
+<span class="kw">const</span> imageUrl = success ? JSON.<span class="fn">parse</span>(data.resultJson).resultUrls?.[<span class="num">0</span>] : <span class="str">''</span>;
+<span class="kw">return</span> { ...pageData, imageUrl, failed: !success };</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie — 15 pages avec imageUrl <span class="badge-count">×15</span></div>
+<div class="grid-5" style="margin-top:8px">${Array.from({length:15},(_,i)=>`<div class="img-thumb"><div class="it-num">P${i+1}</div><div class="it-ok">✅</div></div>`).join('')}</div></div>` },
+
+  { name:"IF Échec", icon:"🔀", cls:"t-if", type:"IF (branche false)",
+    desc:"Vérifie si des illustrations ont échoué. Ici toutes réussissent → branche FALSE → Assembler Pages directement.",
+    inp:`<div class="block"><div class="block-title">Condition</div><pre class="code">$json.failed === <span class="kw">true</span> ?
+
+Résultat : <span class="tag-ok">FAUX (0/15 échecs)</span>
+→ Toutes les illustrations générées avec succès
+→ Pas de retry nécessaire</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Branche activée</div><pre class="code"><span class="cm">• Sortie 0 (TRUE) : Pages Échouées → Resoumettre KIE → ...</span>
+<span class="cm">• Sortie 1 (FALSE) : <strong>Assembler Pages</strong> ← activée ici ✅</span></pre></div>`,
+    out:`<div class="block"><div class="block-title">Passage vers Assembler Pages</div><pre class="code"><span class="cm">Les 15 items passent directement à Assembler Pages.
+Le chemin retry (Pages Échouées → Resoumettre → ...) est ignoré.</span></pre></div>` },
+
+  { name:"Assembler Pages", icon:"📦", cls:"t-code", type:"Code",
+    desc:"Agrège les 15 pages (issue du IF false ou du Fusionner Résultats) en une liste propre et cohérente.",
+    inp:`<div class="block"><div class="block-title">Entrée — 15 pages validées</div><pre class="code">Provenance : IF Échec (branche false)
+<span class="num">15</span> items, tous avec imageUrl valide et failed=false</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Code</div><pre class="code"><span class="kw">return</span> pollingResults.<span class="fn">map</span>(item => ({
+  json: {
+    page: item.json.page, texte: item.json.texte,
+    imageUrl: item.json.imageUrl,
+    prenom, titre, resume, email, address1, city, <span class="cm">// ...</span>
+    theme, monthLabel, couverture, genre
+  }
+}));</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie — 15 pages assemblées</div>
+<div class="grid-3" style="margin-top:8px">${STORY.pages.slice(0,6).map((p,i)=>`<div class="card"><div class="cn">Page ${p.numero}</div><div class="cv img-thumb" style="aspect-ratio:16/9;max-height:50px"><div class="it-num">P${p.numero}</div><div class="it-ok">🖼️</div></div></div>`).join('')}<div class="card" style="display:flex;align-items:center;justify-content:center;color:#6b7280">+9</div></div></div>` },
+
+  { name:"Construire Livre Abonné", icon:"📕", cls:"t-code", type:"Code",
+    desc:"Assemble le bookData complet, détermine le productUid Gelato selon la couverture, génère la référence commande, encode en base64.",
+    inp:`<div class="block"><div class="block-title">Entrée — 15 pages assemblées</div><pre class="code">Couverture : <span class="str">"Rigide - 20x20 cm"</span>
+Genre : <span class="str">"Fille"</span>
+15 pages avec imageUrl</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Code</div><pre class="code"><span class="kw">const</span> orderRef = <span class="str">\`ABO-\${first.orderId}-\${Date.now()}\`</span>;
+productUid = <span class="str">'photobooks-hardcover_pf_200x200-mm...'</span>; <span class="cm">// Rigide 20x20</span>
+remerciementUrl = <span class="str">'...2_ewr756.png'</span>; <span class="cm">// version fille</span>
+<span class="kw">const</span> dataB64 = Buffer.<span class="fn">from</span>(JSON.<span class="fn">stringify</span>(bookData)).<span class="fn">toString</span>(<span class="str">'base64'</span>);</pre></div>`,
+    out:`<div class="block"><div class="block-title">Sortie — BookData encodé</div><pre class="code">${jh({dataB64:"eyJvcmRlclJlZiI6IkFCTy1MVi0yMDI2LTAwMzQyLTE3NDg3ODI4MDAwMDAiLCJwcm...(base64)",orderRef:ORDER_REF,prenom:"Emma",titre:"Emma et le trésor des vagues",resume:"Emma découvre un mystérieux message...",couverture:"Rigide - 20x20 cm",email:"marie.dupont@gmail.com",firstName:"Marie",theme:"L'aventure à la plage",monthLabel:"juin 2026",totalPages:15})}</pre></div>` },
+
+  { name:"Ajouter à la File", icon:"📋", cls:"t-http", type:"HTTP POST",
+    desc:"Envoie le livre à la file d'attente WF3 (tableau de bord admin) avec statut 'pending' en attente de validation.",
+    inp:`<div class="block"><div class="block-title">Requête</div><pre class="code"><span class="kw">POST</span> <span class="str">https://n8n.srv1591454.hstgr.cloud/webhook/add-to-queue</span>
+
+${jh({dataB64:"eyJvcmRlclJlZiI6...",orderRef:ORDER_REF,prenom:"Emma",titre:"Emma et le trésor des vagues",couverture:"Rigide - 20x20 cm",totalPages:15,status:"pending"})}</pre></div>`,
+    proc:`<div class="block"><div class="block-title">WF3 — Add to queue</div><pre class="code">sd.queue[<span class="str">"${ORDER_REF}"</span>] = {
+  dataB64, orderRef, prenom, titre, couverture,
+  coverImageUrl, totalPages, status: <span class="str">"pending"</span>,
+  addedAt: <span class="str">"2026-06-01T09:07:15.000Z"</span>
+};</pre></div>`,
+    out:`<div class="block"><div class="block-title">Réponse</div><pre class="code">${jh({ok:true,orderRef:ORDER_REF,status:"pending",position:1})}</pre></div>
+<div class="block"><div class="block-title">📊 Tableau de bord admin — après ajout</div><pre class="code">Le livre est désormais visible dans le dashboard admin.
+L'admin valide → WF2 génère le PDF → Gelato imprime.</pre></div>` },
+
+  { name:"Enregistrer Historique", icon:"🗄️", cls:"t-http", type:"HTTP POST",
+    desc:"Archive le titre, résumé et thème de l'histoire dans l'historique de l'abonné pour éviter les répétitions les mois suivants.",
+    inp:`<div class="block"><div class="block-title">Requête</div><pre class="code"><span class="kw">POST</span> <span class="str">https://n8n.srv1591454.hstgr.cloud/webhook/add-story-history</span>
+
+${jh({email:"marie.dupont@gmail.com",titre:"Emma et le trésor des vagues",theme:"L'aventure à la plage",monthLabel:"juin 2026",resume:"Emma découvre un mystérieux message dans une bouteille sur la plage de Saint-Malo..."})}</pre></div>`,
+    proc:`<div class="block"><div class="block-title">WF3b — Ajouter Historique</div><pre class="code">sd.storyHistory[<span class="str">"marie.dupont@gmail.com"</span>].push({
+  titre: <span class="str">"Emma et le trésor des vagues"</span>,
+  theme: <span class="str">"L'aventure à la plage"</span>,
+  monthLabel: <span class="str">"juin 2026"</span>,
+  resume: <span class="str">"Emma découvre un mystérieux message..."</span>,
+  addedAt: <span class="str">"2026-06-01T09:07:16.000Z"</span>
+});</pre></div>`,
+    out:`<div class="block"><div class="block-title">Réponse</div><pre class="code">${jh({ok:true,email:"marie.dupont@gmail.com",total:1})}</pre></div>
+<div class="block" style="border-color:#10b98133"><div class="block-title" style="color:#10b981">📅 Impact sur le mois prochain</div><pre class="code">En juillet 2026, quand WF5 traitera Emma à nouveau :
+→ Historique = 1 histoire trouvée
+→ Injection dans le prompt : "1. \\"Emma et le trésor des vagues\\" — Thème: L'aventure à la plage (juin 2026)"
+→ Claude générera une aventure COMPLÈTEMENT DIFFÉRENTE</pre></div>` },
+
+  { name:"Split Abonnés (terminé)", icon:"✅", cls:"t-split", type:"SplitInBatches — done",
+    desc:"Tous les abonnés ont été traités (1/1). La branche 'done' est activée, déclenchant la notification finale admin.",
+    inp:`<div class="block"><div class="block-title">État du batch</div><pre class="code">Batch <span class="num">1</span> / <span class="num">1</span> traité avec succès ✅
+→ Branche DONE activée</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Résumé de la génération</div><pre class="code"><span class="cm">1 abonné traité : Emma (marie.dupont@gmail.com)</span>
+<span class="cm">1 histoire générée : "Emma et le trésor des vagues"</span>
+<span class="cm">15 illustrations img2img créées</span>
+<span class="cm">1 livre ajouté à la file d'attente admin</span>
+<span class="cm">1 entrée historique enregistrée</span></pre></div>`,
+    out:`<div class="block"><div class="block-title">Signal vers Notif Admin</div><pre class="code"><span class="cm">→ Notif Admin Fin Génération activée</span></pre></div>` },
+
+  { name:"Notif Admin Fin Génération", icon:"📧", cls:"t-email", type:"Email (SMTP)",
+    desc:"Envoie un email à info@livreetvous.fr pour signaler que tous les livres du mois sont générés et prêts à valider.",
+    inp:`<div class="block"><div class="block-title">Données email</div><pre class="code">De : izoahmet4@gmail.com
+À  : info@livreetvous.fr
+Sujet : ✅ Génération mensuelle terminée — juin 2026</pre></div>`,
+    proc:`<div class="block"><div class="block-title">Contenu de l'email</div>
+<div style="background:#fff;border-radius:8px;padding:20px;color:#111;font-family:Arial,sans-serif;font-size:13px;line-height:1.6">
+  <h3 style="color:#4f46e5;margin-bottom:10px">📚 Livre&Vous — Génération terminée</h3>
+  <p>La génération mensuelle des livres abonnés est terminée.</p>
+  <p style="margin-top:8px">Consultez le <a href="#" style="color:#4f46e5">tableau de bord</a> pour valider les livres avant impression.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0">
+  <p style="font-size:11px;color:#9ca3af">Mois : juin 2026 · 1 livre généré · Livre&Vous</p>
+</div></div>`,
+    out:`<div class="block" style="border-color:#10b98133"><div class="block-title" style="color:#10b981">✅ Exécution complète</div><pre class="code">L'email a été envoyé avec succès.
+L'admin se connecte au dashboard et valide les livres.
+WF2 prend le relais pour générer le PDF et commander l'impression Gelato.</pre></div>` }
+];
+
+// ─── JSON highlighter ─────────────────────────────────────────────────────────
+function jh(obj) {
+  return JSON.stringify(obj, null, 2)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"(.*?)":/g,'<span class="jk">"$1"</span>:')
+    .replace(/: "(.*?)"/g,': <span class="jv">"$1"</span>')
+    .replace(/: (\d+\.?\d*)/g,': <span class="jn">$1</span>')
+    .replace(/: (true|false)/g,': <span class="jb">$1</span>');
+}
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let cur = 0, activeTab = 'input', playing = false, timer = null;
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  const s = STEPS[cur], n = STEPS.length;
+  document.getElementById('prog').style.width = ((cur+1)/n*100)+'%';
+  document.getElementById('ni').textContent = s.icon;
+  document.getElementById('nn').textContent = s.name;
+  document.getElementById('nt').className = 'type-chip '+s.cls;
+  document.getElementById('nt').textContent = s.type;
+  document.getElementById('nd').textContent = s.desc;
+  const done = cur === n-1;
+  document.getElementById('sp').className = 'status-pill '+(done?'s-done':'s-run');
+  document.getElementById('st').textContent = done?'Terminé':'En cours';
+  document.getElementById('ci').textContent = `Étape ${cur+1} / ${n}`;
+  document.getElementById('bp').disabled = cur === 0;
+  document.getElementById('bn').disabled = cur === n-1;
+  renderTab();
+  buildSidebar();
+}
+
+function renderTab() {
+  const s = STEPS[cur];
+  const map = {input:s.inp, proc:s.proc, out:s.out};
+  document.getElementById('body').innerHTML = map[activeTab] || '';
+  ['input','proc','out'].forEach(t => {
+    document.getElementById('t-'+t).classList.toggle('active', t===activeTab);
+  });
+  document.getElementById('body').scrollTop = 0;
+}
+
+function tab(t) { activeTab = t; renderTab(); }
+
+function buildSidebar() {
+  document.getElementById('sidebar').innerHTML = STEPS.map((s,i) => `
+    <div class="step-item ${i<cur?'done':''} ${i===cur?'active':''}" onclick="goto(${i})">
+      <div class="step-dot"></div>
+      <div class="step-meta">
+        <div class="step-num">Étape ${i+1}</div>
+        <div class="step-title">${s.icon} ${s.name}</div>
+      </div>
+    </div>`).join('');
+  const el = document.querySelector('.step-item.active');
+  if (el) el.scrollIntoView({block:'nearest', behavior:'smooth'});
+}
+
+function goto(i) { cur = i; activeTab = 'input'; render(); }
+function next() { if (cur < STEPS.length-1) { cur++; activeTab='input'; render(); } }
+function prev() { if (cur > 0) { cur--; activeTab='input'; render(); } }
+
+function togglePlay() {
+  playing = !playing;
+  document.getElementById('bpl').textContent = playing ? '⏸ Pause' : '▶ Lecture auto';
+  if (playing) {
+    timer = setInterval(() => {
+      if (cur >= STEPS.length-1) { playing=false; clearInterval(timer); document.getElementById('bpl').textContent='▶ Lecture auto'; return; }
+      next();
+    }, 2200);
+  } else {
+    clearInterval(timer);
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') next();
+  if (e.key === 'ArrowLeft') prev();
+});
+
+render();
+</script>
+</body>
+</html>
